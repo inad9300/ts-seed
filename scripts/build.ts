@@ -1,7 +1,7 @@
 import { findProjectRoot } from './helpers/findProjectRoot'
 import { compilerOptions } from '../tsconfig.json'
 import { tsc } from './helpers/tsc'
-import { readFileSync, writeFileSync } from 'fs'
+import { readFileSync, appendFileSync } from 'fs'
 import { resolve } from 'path'
 
 process.chdir(findProjectRoot())
@@ -17,10 +17,6 @@ tsc(['./resources/define.ts'], {
   removeComments: false
 })
 
-const [defineJsStart, defineJsEnd] = readFileSync(resolve(defineJsPath))
-  .toString()
-  .split('// ---')
-
 const mainJsPath = './out/src/main.js'
 
 tsc(['./src/main.ts'], {
@@ -30,9 +26,9 @@ tsc(['./src/main.ts'], {
   outFile: mainJsPath
 })
 
-writeFileSync(
+appendFileSync(
   resolve(mainJsPath),
-  defineJsStart + '\n' + readFileSync(mainJsPath) + defineJsEnd
+  '\n' + readFileSync(resolve(defineJsPath)).toString()
 )
 
 // replaceVar(

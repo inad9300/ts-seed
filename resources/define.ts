@@ -12,8 +12,6 @@ function define(modName: string, depNames: string[], factoryFn: FactoryFn) {
   ]
 }
 
-// ---
-
 function requireFn(_dep: string): never {
   throw new Error('dynamic "require"s are not supported')
 }
