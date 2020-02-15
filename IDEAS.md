@@ -19,9 +19,11 @@
              - Linting
              - Format
 
-- Commit
+- Pre-commit
   - Linting (different configuration, e.g. "no console")
   - Run all tests
-  - Deploy
+
+- Post-push
+  - Optimize  - Deploy
 
 - Release
