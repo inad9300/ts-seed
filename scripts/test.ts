@@ -16,23 +16,30 @@ tsc(sourceTestFiles, {
   lib: ['es2019']
 })
 
-const compiledTestFiles = filesEndingWith(resolve(outDir), '.test.js')
+const absOutDir = resolve(outDir)
+const compiledTestFiles = filesEndingWith(absOutDir, '.test.js')
 
-const errors: AssertionError[] = []
-const timing: [string, number][] = []
+type TestError = AssertionError & {
+  _file: string
+  _testName: string
+}
 
-function registerError(err: any, title: string) {
+const errors: TestError[] = []
+const timing: [string, string, number][] = []
+
+function registerError(file: string, testName: string, err: any) {
   if (err instanceof AssertionError) {
-    (err as any)._title = title
-    errors.push(err)
+    ;(err as TestError)._file = file.substr(absOutDir.length + 1)
+    ;(err as TestError)._testName = testName
+    errors.push(err as TestError)
   } else {
     console.error('Unexpected error while running tests.', err)
     process.exit(-1)
   }
 }
 
-function registerTime(testName: string, t: [number, number]) {
-  timing.push([testName, t[0] * 1000 + t[1] / 1_000_000])
+function registerTime(file: string, testName: string, t: [number, number]) {
+  timing.push([file.substr(absOutDir.length + 1), testName, t[0] * 1000 + t[1] / 1_000_000])
 }
 
 type TestFunction = () => void | Promise<any>
@@ -41,8 +48,8 @@ type TestModule = {
 }
 
 const testPromises = compiledTestFiles
-.map(f => require(f).default as TestModule)
-.map(testObject => {
+.map(file => {
+  const testObject = require(file).default as TestModule
   if (
     !testObject ||
     typeof testObject !== 'object' ||
@@ -62,18 +69,18 @@ const testPromises = compiledTestFiles
     try {
       const out = fn()
       if (!(out instanceof Promise)) {
-        registerTime(title, process.hrtime(t))
+        registerTime(file, title, process.hrtime(t))
         return Promise.resolve()
       }
       return out
-        .then(() => registerTime(title, process.hrtime(t)))
+        .then(() => registerTime(file, title, process.hrtime(t)))
         .catch(err => {
-          registerTime(title, process.hrtime(t))
-          registerError(err, title)
+          registerTime(file, title, process.hrtime(t))
+          registerError(file, title, err)
         })
     } catch (err) {
-      registerTime(title, process.hrtime(t))
-      registerError(err, title)
+      registerTime(file, title, process.hrtime(t))
+      registerError(file, title, err)
       return Promise.resolve()
     }
   })
@@ -82,12 +89,13 @@ const testPromises = compiledTestFiles
 
 Promise.all(testPromises).finally(() => {
   if (errors.length === 0) {
-    console.error('\n No errors!')
+    console.error('\n No errors!') // TODO Log in green.
   } else {
-    console.error('\n Errors')
+    console.error('\n Errors') // TODO Log in red.
     console.table(
       errors.map(err => ({
-        test: (err as any)._title,
+        file: err._file,
+        test: err._testName,
         message: err.message.replace(/\n+/g, ' '),
         expected: err.expected,
         operator: err.operator,
@@ -97,15 +105,17 @@ Promise.all(testPromises).finally(() => {
   }
 
   const decimalPlaces = 2
-  const fnPadSize = Math.max(...timing.map(([fn]) => fn.length))
-  const timePadSize = Math.max(...timing.map(([_fn, t]) => t.toFixed(0).length)) + 1 + decimalPlaces
+  const filePadSize = Math.max(...timing.map(([file]) => file.length))
+  const testNamePadSize = Math.max(...timing.map(([_file, testName]) => testName.length))
+  const timePadSize = Math.max(...timing.map(([_file, _testName, t]) => t.toFixed(0).length)) + 1 + decimalPlaces
 
-  console.info('\n Timing')
+  console.info('\n Timing') // TODO Display total.
   console.table(
     timing
-      .sort((a, b) => (a[1] > b[1] ? -1 : 1))
-      .map(([fn, t]) => [
-        fn.padStart(fnPadSize),
+      .sort((a, b) => (a[2] > b[2] ? -1 : 1))
+      .map(([file, testName, t]) => [
+        file.padStart(filePadSize),
+        testName.padStart(testNamePadSize),
         t.toFixed(decimalPlaces).padStart(timePadSize) + ' ms'
       ])
   )
